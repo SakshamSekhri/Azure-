@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Placement Preparation Documentation
+    url: https://github.com/SakshamSekhri/Azure-/blob/main/docs/architecture.md
+    about: Review our technical architecture and credit-control policies.
