@@ -23,12 +23,8 @@ def _build_profile_response(db: Session, user: User, profile: StudentProfile) ->
         .order_by(Resume.version.desc(), Resume.id.desc())
         .first()
     )
-    active_job = (
-        db.query(JobDescription)
-        .filter(JobDescription.user_id == user.id)
-        .order_by(JobDescription.id.desc())
-        .first()
-    )
+    from backend.app.services.job_service import JobService
+    active_job = JobService.get_active_target_job(db, user.id)
 
     resume_summary = None
     if active_resume:
@@ -67,6 +63,9 @@ def _build_profile_response(db: Session, user: User, profile: StudentProfile) ->
     response = ProfileResponse.model_validate(profile)
     response.active_resume = resume_summary
     response.active_job = job_summary
+    # Active Target Job is single source of truth for the target role
+    if active_job and active_job.title:
+        response.target_role = active_job.title
     return response
 
 
@@ -80,7 +79,7 @@ def get_profile(
         profile = StudentProfile(
             user_id=current_user.id,
             name=current_user.email.split("@")[0].capitalize(),
-            target_role="Full Stack Developer",
+            target_role=None,
             experience_level="Entry Level"
         )
         db.add(profile)
@@ -108,3 +107,16 @@ def update_profile(
     db.commit()
     db.refresh(profile)
     return _build_profile_response(db, current_user, profile)
+
+
+from backend.app.schemas.placement_profile import PlacementProfileSchema
+from backend.app.services.placement_profile_service import PlacementProfileService
+
+
+@router.get("/placement-profile", response_model=PlacementProfileSchema)
+def get_normalized_placement_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve the central normalized Placement Profile (Requirement 3)."""
+    return PlacementProfileService.get_placement_profile(db, current_user.id)

@@ -10,6 +10,7 @@ class AssessmentAnswer(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     assessment_id = Column(Integer, ForeignKey("assessments.id", ondelete="CASCADE"), nullable=False, index=True)
+    attempt_id = Column(Integer, ForeignKey("assessment_attempts.id", ondelete="CASCADE"), nullable=True, index=True)
     question_id = Column(Integer, ForeignKey("assessment_questions.id", ondelete="CASCADE"), nullable=False, index=True)
     candidate_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     selected_answer = Column(Text, nullable=False)
@@ -19,5 +20,6 @@ class AssessmentAnswer(Base):
     answered_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     assessment = relationship("Assessment", back_populates="answers")
+    attempt = relationship("AssessmentAttempt", back_populates="answers_rel")
     question_rel = relationship("AssessmentQuestion", back_populates="answers")
     candidate = relationship("User", back_populates="assessment_answers")

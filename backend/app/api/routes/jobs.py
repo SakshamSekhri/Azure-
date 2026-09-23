@@ -77,3 +77,16 @@ def list_jobs(
     current_user: User = Depends(get_current_user)
 ):
     return db.query(JobDescription).filter(JobDescription.user_id == current_user.id).order_by(JobDescription.created_at.desc()).all()
+
+
+@router.get("/{job_id}", response_model=JobDescriptionResponse)
+def get_job_description(
+    job_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve a specific job description, strictly verifying candidate ownership (Requirement 12)."""
+    job = db.query(JobDescription).filter(JobDescription.id == job_id, JobDescription.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found.")
+    return job

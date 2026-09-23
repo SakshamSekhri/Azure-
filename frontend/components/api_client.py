@@ -137,9 +137,20 @@ class APIClient:
         res.raise_for_status()
         return res.json()
 
-    def submit_assessment(self, assessment_id: int, answers: Dict[str, str]) -> Dict[str, Any]:
+    def submit_assessment(
+        self,
+        assessment_id: int,
+        answers: Dict[str, str],
+        duration_seconds: Optional[int] = None,
+        idempotency_key: Optional[str] = None
+    ) -> Dict[str, Any]:
         url = f"{self.base_url}/assessments/{assessment_id}/submit"
-        res = requests.post(url, headers=self._get_headers(), json={"assessment_id": assessment_id, "answers": answers})
+        payload: Dict[str, Any] = {"assessment_id": assessment_id, "answers": answers}
+        if duration_seconds is not None:
+            payload["duration_seconds"] = duration_seconds
+        if idempotency_key:
+            payload["idempotency_key"] = idempotency_key
+        res = requests.post(url, headers=self._get_headers(), json=payload)
         if res.status_code != 200:
             raise Exception(res.json().get("detail", "Assessment submission failed."))
         return res.json()
@@ -147,6 +158,20 @@ class APIClient:
     def get_assessment_result(self, assessment_id: int) -> Optional[Dict[str, Any]]:
         url = f"{self.base_url}/assessments/{assessment_id}/result"
         res = requests.get(url, headers=self._get_headers())
+        if res.status_code == 200:
+            return res.json()
+        return None
+
+    def get_assessment_attempt_result(self, assessment_id: int, attempt_id: int) -> Optional[Dict[str, Any]]:
+        url = f"{self.base_url}/assessments/{assessment_id}/attempts/{attempt_id}/result"
+        res = requests.get(url, headers=self._get_headers())
+        if res.status_code == 200:
+            return res.json()
+        return None
+
+    def retry_assessment_analysis(self, assessment_id: int, attempt_id: int) -> Optional[Dict[str, Any]]:
+        url = f"{self.base_url}/assessments/{assessment_id}/attempts/{attempt_id}/retry-analysis"
+        res = requests.post(url, headers=self._get_headers())
         if res.status_code == 200:
             return res.json()
         return None
@@ -164,6 +189,12 @@ class APIClient:
         if res.status_code == 200:
             return res.json()
         return None
+
+    def get_improvement_plan(self) -> Dict[str, Any]:
+        url = f"{self.base_url}/learning/improvement-plan"
+        res = requests.get(url, headers=self._get_headers())
+        res.raise_for_status()
+        return res.json()
 
     def generate_plan(self, target_role: Optional[str] = None, force_refresh: bool = False) -> Dict[str, Any]:
         url = f"{self.base_url}/learning/plan/generate"
@@ -187,7 +218,8 @@ class APIClient:
 
     def generate_personalized_assessment(
         self,
-        role: str,
+        role: Optional[str] = None,
+        job_id: Optional[int] = None,
         job_description: Optional[str] = None,
         resume: Optional[str] = None,
         num_questions: int = 5
@@ -195,6 +227,7 @@ class APIClient:
         url = f"{self.base_url}/assessments/personalized/generate"
         payload = {
             "role": role,
+            "job_id": job_id,
             "job_description": job_description,
             "resume": resume,
             "num_questions": num_questions
@@ -221,6 +254,58 @@ class APIClient:
         url = f"{self.base_url}/ai/logs"
         res = requests.get(url, headers=self._get_headers())
         res.raise_for_status()
+        return res.json()
+
+    def get_skill_focus(self, skill_identifier: str) -> Dict[str, Any]:
+        url = f"{self.base_url}/practice/skills/focus"
+        res = requests.get(url, headers=self._get_headers(), params={"skill": skill_identifier})
+        if res.status_code != 200:
+            raise Exception(res.json().get("detail", "Failed to retrieve skill focus detail."))
+        return res.json()
+
+    def get_skill_topics(self, skill_identifier: str) -> List[Dict[str, Any]]:
+        url = f"{self.base_url}/practice/skills/topics"
+        res = requests.get(url, headers=self._get_headers(), params={"skill": skill_identifier})
+        if res.status_code != 200:
+            raise Exception(res.json().get("detail", "Failed to retrieve skill topics."))
+        return res.json()
+
+    def generate_practice(
+        self,
+        skill: str,
+        topic: Optional[str] = None,
+        num_questions: int = 5,
+        difficulty: Optional[str] = None
+    ) -> Dict[str, Any]:
+        url = f"{self.base_url}/practice/generate"
+        payload = {
+            "skill": skill,
+            "topic": topic,
+            "num_questions": num_questions,
+            "difficulty": difficulty
+        }
+        res = requests.post(url, headers=self._get_headers(), json=payload)
+        if res.status_code != 200:
+            raise Exception(res.json().get("detail", "Failed to generate practice questions."))
+        return res.json()
+
+    def generate_focused_assessment(
+        self,
+        skill: str,
+        topic: Optional[str] = None,
+        num_questions: int = 10,
+        difficulty: Optional[str] = None
+    ) -> Dict[str, Any]:
+        url = f"{self.base_url}/practice/focused-assessment/generate"
+        payload = {
+            "skill": skill,
+            "topic": topic,
+            "num_questions": num_questions,
+            "difficulty": difficulty
+        }
+        res = requests.post(url, headers=self._get_headers(), json=payload)
+        if res.status_code != 200:
+            raise Exception(res.json().get("detail", "Failed to generate focused assessment."))
         return res.json()
 
 

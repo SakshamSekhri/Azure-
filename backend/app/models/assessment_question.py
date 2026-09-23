@@ -16,11 +16,13 @@ class AssessmentQuestion(Base):
     options = Column(JSON, nullable=False)  # List of 4 strings
     correct_answer = Column(Text, nullable=False)
     explanation = Column(Text, nullable=False)
+    canonical_skill_id = Column(String(100), nullable=True, index=True)
     skill = Column(String(100), nullable=True, index=True)
     topic = Column(String(100), nullable=True)
     concept = Column(String(100), nullable=True)
     difficulty = Column(String(50), default="Intermediate", nullable=False)
     why_the_question_is_relevant = Column(Text, nullable=True)
+    question_hash = Column(String(64), nullable=True, index=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
     assessment = relationship("Assessment", back_populates="questions")

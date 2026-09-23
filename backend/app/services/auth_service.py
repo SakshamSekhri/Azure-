@@ -31,7 +31,7 @@ class AuthService:
         default_profile = StudentProfile(
             user_id=db_user.id,
             name=user_in.email.split("@")[0].capitalize(),
-            target_role="Full Stack Developer",
+            target_role=None,
             experience_level="Entry Level"
         )
         db.add(default_profile)

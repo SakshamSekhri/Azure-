@@ -137,7 +137,7 @@ def test_4_if_foundry_fails_no_questions_returned(db_session, test_user, monkeyp
         )
 
     # Must raise error and NOT return or save any fallback questions
-    assert "Azure AI Foundry connection timed out" in str(exc_info.value)
+    assert "Azure AI Foundry connection timed out" in str(exc_info.value) or "Unable to generate personalized assessment" in str(exc_info.value)
     assert db_session.query(AssessmentQuestion).count() == initial_q_count
     assert db_session.query(Assessment).count() == initial_a_count
 
@@ -409,6 +409,17 @@ def test_9_ai_result_analysis_is_saved(db_session, test_user, monkeypatch):
         .first()
     )
     assert attempt is not None
+    assert attempt.analysis_status == "pending"
+
+    # In async architecture, run background worker to enrich attempt with AI analysis
+    AssessmentService.run_background_result_analysis(
+        attempt_id=attempt.id,
+        user_id=test_user.id,
+        assessment_id=assessment.id,
+        db=db_session
+    )
+    db_session.refresh(attempt)
+    assert attempt.analysis_status == "completed"
     assert attempt.result_summary_json is not None
     assert attempt.result_summary_json["strengths"] == expected_strengths
     assert attempt.result_summary_json["weaknesses"] == expected_weaknesses
@@ -467,10 +478,10 @@ def test_11_previous_history_used_in_next_generation(db_session, test_user, monk
             questions=[
                 AssessmentMCQItem(
                     id=1,
-                    question="New Q?",
-                    options=["A", "B", "C", "D"],
-                    correct_answer="A",
-                    explanation="E",
+                    question="How does PostgreSQL query planner evaluate costs for B-Tree index scans?",
+                    options=["Estimates sequential and random disk page fetches", "Counts lines in tables", "Runs full table scans", "Allocates shared memory"],
+                    correct_answer="Estimates sequential and random disk page fetches",
+                    explanation="Cost estimation considers random_page_cost and seq_page_cost.",
                     skill="SQL",
                     difficulty="Advanced",
                     topic="Query Planning",

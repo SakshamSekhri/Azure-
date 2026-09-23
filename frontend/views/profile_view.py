@@ -20,17 +20,18 @@ def render_profile_view():
             degree = st.text_input("Degree Program", value=profile.get("degree", ""))
 
         with col2:
-            roles = [
-                "Full Stack Backend Engineer",
-                "Frontend Engineer (React/TypeScript)",
-                "Full Stack Developer",
-                "Data Engineer / Big Data",
-                "DevOps / Cloud Engineer",
-                "Machine Learning / AI Engineer"
-            ]
-            current_role = profile.get("target_role", "Full Stack Backend Engineer")
-            role_index = roles.index(current_role) if current_role in roles else 0
-            target_role = st.selectbox("Target Role", roles, index=role_index)
+            active_job = profile.get("active_job")
+            if active_job and active_job.get("title"):
+                role_display = f"{active_job.get('title')}" + (f" @ {active_job.get('company')}" if active_job.get('company') else "")
+            else:
+                role_display = profile.get("target_role") or "No active target job linked"
+
+            st.text_input(
+                "Active Target Role",
+                value=role_display,
+                disabled=True,
+                help="Your Target Job is the single source of truth for your evaluation role. Manage it in the Target Job page."
+            )
 
             exp_levels = ["Entry Level", "1-2 Years", "3-5 Years"]
             current_exp = profile.get("experience_level", "Entry Level")
@@ -44,15 +45,17 @@ def render_profile_view():
         submitted = st.form_submit_button("Save Profile Updates", type="primary", use_container_width=True)
         if submitted:
             try:
-                api.update_profile({
+                update_payload = {
                     "name": name,
                     "college": college,
                     "degree": degree,
                     "graduation_year": int(grad_year),
-                    "target_role": target_role,
                     "experience_level": experience_level,
                     "github_username": github_username
-                })
+                }
+                if active_job and active_job.get("title"):
+                    update_payload["target_role"] = active_job.get("title")
+                api.update_profile(update_payload)
                 st.success("Profile saved successfully!")
                 st.rerun()
             except Exception as e:

@@ -19,9 +19,30 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
 
     # Security
-    SECRET_KEY: str = "placement-prep-agent-development-secret-key-32-bytes"
+    SECRET_KEY: str = Field(
+        default="placement-prep-agent-development-secret-key-32-bytes",
+        description="JWT encryption secret key"
+    )
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 24 hours
+
+    @field_validator("SECRET_KEY", mode="after")
+    @classmethod
+    def validate_secret_key(cls, v: str, info) -> str:
+        env = info.data.get("ENVIRONMENT", "development")
+        insecure_defaults = [
+            "placement-prep-agent-development-secret-key-32-bytes",
+            "replace-with-a-very-secure-random-secret-key",
+            "secret",
+            "changeme"
+        ]
+        if env == "production":
+            if not v or v in insecure_defaults or len(v) < 32:
+                raise ValueError("In production, SECRET_KEY must be explicitly set to a cryptographically secure key of at least 32 characters.")
+        elif not v:
+            import secrets
+            return secrets.token_urlsafe(32)
+        return v
 
     # Database - Resolved to absolute path to prevent multi-database working directory bugs
     DATABASE_URL: str = Field(

@@ -1,151 +1,229 @@
+from datetime import datetime
 import streamlit as st
-import streamlit.components.v1 as components
 from frontend.components.api_client import api
-
-TABLE_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-* { font-family: 'Inter', sans-serif; box-sizing: border-box; }
-.styled-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.styled-table th { background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left; padding: 0.75rem; font-weight: 600; color: #475569; }
-.styled-table td { padding: 0.75rem; border-bottom: 1px solid #e2e8f0; color: #1e293b; }
-.styled-table tr:hover td { background-color: #f8fafc; }
-.metric-badge { display: inline-block; font-size: 0.78rem; font-weight: 600; padding: 0.2rem 0.55rem; border-radius: 9999px; }
-.badge-high   { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-.badge-medium { background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
-.badge-low    { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-.badge-info   { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-code { background: #f1f5f9; border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.8rem; color: #0f172a; }
-</style>
-"""
+from frontend.components.ui import (
+    render_page_header,
+    render_section_header,
+    render_progress_bar,
+    render_status_badge,
+    render_styled_table,
+    render_empty_state,
+    render_html
+)
 
 
 def render_dashboard_view():
-    st.markdown("### 📊 Student Preparation Command Center")
-    st.markdown("Real-time readiness analytics synthesized from verified evidence, objective scoring, and dynamic assessments.")
+    user = st.session_state.get("user_info") or {}
+    user_name = user.get("name") or (user.get("email", "").split("@")[0].capitalize() if user.get("email") else "Candidate")
+    
+    current_hour = datetime.now().hour
+    greeting = "Good morning" if current_hour < 12 else ("Good afternoon" if current_hour < 18 else "Good evening")
+
+    render_page_header(
+        title=f"{greeting}, {user_name}",
+        subtitle="Your placement preparation at a glance."
+    )
 
     try:
         data = api.get_dashboard_summary()
     except Exception as e:
-        st.error(f"Failed to load dashboard: {str(e)}")
+        render_empty_state("Unable to Load Dashboard", f"Error connecting to backend services: {str(e)}", icon="⚠️")
         return
 
-    # Top Welcome & Next Action Banner
-    rec = data.get("recommended_action", {})
-    st.markdown(f"""
-    <div class="action-banner">
-        <h4>⚡ Recommended Next Action: {rec.get('title', 'Continue Preparation')}</h4>
-        <p><strong>Why:</strong> {rec.get('reason', 'Step-by-step verified preparation')}</p>
-        <p style="margin-top: 0.3rem; opacity: 0.9;">{rec.get('description', '')}</p>
-    </div>
-    """, unsafe_allow_html=True)
+    readiness_score = round(data.get("overall_preparation_score", 0.0), 1)
+    target_role = data.get("target_role") or "Target Role"
+    target_company = data.get("target_company")
+    company_str = f" @ {target_company}" if target_company else ""
 
-    # 4 Key Metrics Cards
-    c1, c2, c3, c4 = st.columns(4)
-    with c1:
-        st.markdown(f"""
-        <div class="app-card">
-            <span style="color: #64748b; font-size: 0.85rem; font-weight: 500;">Overall Preparation</span>
-            <h2 style="margin: 0.3rem 0; color: #1e293b;">{data.get('overall_preparation_score', 0)}%</h2>
-            <div style="font-size: 0.8rem; color: #22c55e;">Target: {data.get('target_role', 'Engineer')}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c2:
-        st.markdown(f"""
-        <div class="app-card">
-            <span style="color: #64748b; font-size: 0.85rem; font-weight: 500;">Assessed Skills</span>
-            <h2 style="margin: 0.3rem 0; color: #1e293b;">{data.get('assessed_skills_count', 0)} / {data.get('total_skills_tracked', 0)}</h2>
-            <div style="font-size: 0.8rem; color: #3b82f6;">Objective MCQ verified</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c3:
-        st.markdown(f"""
-        <div class="app-card">
-            <span style="color: #64748b; font-size: 0.85rem; font-weight: 500;">Evidence Items</span>
-            <h2 style="margin: 0.3rem 0; color: #1e293b;">{data.get('evidence_count', 0)}</h2>
-            <div style="font-size: 0.8rem; color: #0284c7;">{'GitHub Connected ✓' if data.get('github_connected') else 'GitHub Not Linked'}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c4:
-        st.markdown(f"""
-        <div class="app-card">
-            <span style="color: #64748b; font-size: 0.85rem; font-weight: 500;">7-Day Plan Progress</span>
-            <h2 style="margin: 0.3rem 0; color: #1e293b;">{data.get('active_plan_progress_percentage', 0)}%</h2>
-            <div style="font-size: 0.8rem; color: #eab308;">{'Active Plan In Progress' if data.get('has_active_plan') else 'No Active Plan'}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-    st.markdown("---")
-
-    # Strengths vs Gaps Row
-    col_str, col_gap = st.columns(2)
-    with col_str:
-        st.markdown("##### 🏆 Verified Strengths (High Confidence)")
-        strengths = data.get("top_strengths", [])
-        if strengths:
-            for s in strengths:
-                st.markdown(f"<span class='metric-badge badge-high'>✓ {s}</span>", unsafe_allow_html=True)
-        else:
-            st.info("No high-confidence skills yet. Complete assessments to prove skills.")
-
-    with col_gap:
-        st.markdown("##### ⚠️ Priority Skill Gaps (Need Practice)")
-        gaps = data.get("top_gaps", [])
-        if gaps:
-            for g in gaps:
-                st.markdown(f"<span class='metric-badge badge-low'>! {g}</span>", unsafe_allow_html=True)
-        else:
-            st.success("No critical skill gaps identified!")
-
-    st.markdown("---")
-
-    # Interactive Skill Gap Matrix Table
-    st.markdown("##### 📋 Skill Matrix & Confidence Breakdown")
     matrix = data.get("skill_matrix", [])
-    if matrix:
-        table_rows = []
-        for item in matrix:
-            conf = item.get("confidence", "Low")
-            conf_class = "badge-high" if conf == "High" else ("badge-medium" if conf == "Medium" else "badge-low")
+    weak_skills = [
+        s for s in matrix
+        if s.get("status") in ("Weak", "Critical Gap", "Missing", "Required Missing")
+        or (s.get("assessment_score") is not None and s.get("assessment_score") < 65.0)
+    ]
+    attention_count = len(weak_skills)
 
-            claimed_icon = "✓" if item.get("claimed") else "—"
-            github_icon = "✓" if item.get("github_evidence") else "—"
-            score_str = f"{item.get('assessment_score')}%" if item.get("assessment_score") is not None else "Unassessed"
-
-            row_html = f"""
-            <tr>
-                <td><strong>{item.get('skill_name')}</strong></td>
-                <td>{item.get('category')}</td>
-                <td style="text-align: center;">{claimed_icon}</td>
-                <td style="text-align: center;">{github_icon}</td>
-                <td><strong>{score_str}</strong></td>
-                <td><span class="metric-badge {conf_class}">{conf}</span></td>
-                <td>{item.get('status')}</td>
-            </tr>
-            """
-            table_rows.append(row_html)
-
-        html_table = f"""
-        <table class="styled-table">
-            <thead>
-                <tr>
-                    <th>Skill</th>
-                    <th>Category</th>
-                    <th style="text-align: center;">Resume Claim</th>
-                    <th style="text-align: center;">GitHub Proof</th>
-                    <th>Assessment</th>
-                    <th>Confidence</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
-            <tbody>
-                {''.join(table_rows)}
-            </tbody>
-        </table>
+    # -------------------------------------------------------------
+    # 1. PROMINENT TARGET ROLE & READINESS HERO SECTION
+    # -------------------------------------------------------------
+    render_html(
+        f"""
+        <div class="saas-panel" style="padding: 1.5rem 1.8rem; margin-bottom: 1.5rem; border-left: 4px solid var(--accent);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 1rem;">
+                <div style="flex: 1; min-width: 260px;">
+                    <div style="font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: var(--accent); margin-bottom: 0.2rem;">
+                        TARGET ROLE & BENCHMARK
+                    </div>
+                    <div style="font-size: 1.25rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.75rem;">
+                        {target_role}<span style="color: var(--text-secondary); font-weight: 500;">{company_str}</span>
+                    </div>
+                    <div style="display: flex; align-items: baseline; gap: 0.6rem; margin-bottom: 0.4rem;">
+                        <span style="font-size: 0.86rem; color: var(--text-secondary); font-weight: 500;">Placement Readiness:</span>
+                        <span style="font-size: 1.75rem; font-weight: 700; color: var(--text-primary); letter-spacing: -0.02em;">{readiness_score}%</span>
+                        <span style="font-size: 0.78rem; color: var(--text-muted);">(Target: 80%)</span>
+                    </div>
+                    <div style="max-width: 480px; margin-bottom: 0.5rem;">
+                        <div class="saas-bar-track" style="height: 7px;">
+                            <div class="saas-bar-fill" style="width: {min(100.0, readiness_score)}%; background-color: {'#10B981' if readiness_score >= 80 else ('#6366F1' if readiness_score >= 60 else '#F59E0B')};"></div>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--text-secondary);">
+                        {'⚡ Ready for interview rounds!' if readiness_score >= 80 else f'⚠️ <strong>{attention_count} areas</strong> need attention before target benchmark.'}
+                    </div>
+                </div>
+            </div>
+        </div>
         """
-        components.html(TABLE_CSS + html_table, height=max(200, 50 * len(matrix) + 60), scrolling=True)
-    else:
-        st.info("Upload your resume or add a target job description to build your personalized skill matrix.")
+    )
+
+    # -------------------------------------------------------------
+    # 2. KEY METRICS (Concise, Clean Row)
+    # -------------------------------------------------------------
+    tech_knowledge = round(data.get("technical_knowledge_percentage", 0.0), 1)
+    resume_match = round(data.get("resume_match_percentage", 0.0), 1)
+    jd_coverage = round(data.get("jd_coverage_percentage", 0.0), 1)
+    plan_progress = round(data.get("active_plan_progress_percentage", 0.0), 1)
+
+    m1, m2, m3, m4 = st.columns(4)
+    with m1:
+        st.metric("Technical Knowledge", f"{tech_knowledge}%", help="Average verified MCQ test score")
+    with m2:
+        st.metric("Resume Match", f"{resume_match}%", help="Claimed skills compared to Job Description")
+    with m3:
+        st.metric("Job Coverage", f"{jd_coverage}%", help="Percentage of mandatory competencies addressed")
+    with m4:
+        st.metric("Plan Progress", f"{plan_progress}%", help="Completion percentage of active 7-day curriculum")
+
+    st.write("")
+
+    # -------------------------------------------------------------
+    # 3. SPLIT ROW: YOUR FOCUS vs CONTINUE PREPARATION
+    # -------------------------------------------------------------
+    col_focus, col_action = st.columns([1.1, 1.2])
+
+    with col_focus:
+        render_section_header("🎯 Your Focus", "Areas requiring immediate practice to raise overall readiness")
+        
+        top_focus = weak_skills[:4]
+        if top_focus:
+            for s in top_focus:
+                s_name = s.get("skill_name", "Skill")
+                score_val = s.get("assessment_score")
+                if score_val is not None:
+                    score_num = round(score_val, 1)
+                    score_display = f"{score_num}%"
+                else:
+                    score_num = 0.0
+                    score_display = "Unassessed"
+
+                render_html(
+                    f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 0.84rem; margin-top: 0.6rem; margin-bottom: 0.2rem;">
+                        <span style="font-weight: 600; color: var(--text-primary);">{s_name}</span>
+                        <span style="color: {'#EF4444' if score_num < 50 else '#F59E0B'}; font-weight: 600;">{score_display}</span>
+                    </div>
+                    """
+                )
+                render_progress_bar(score_num, height=5)
+            
+            st.write("")
+            if st.button("View All Skill Gaps & Readiness →", use_container_width=True):
+                st.session_state["pending_nav"] = "Skills Gaps & Readiness"
+                st.rerun()
+        else:
+            st.success("✓ All evaluated skills are currently meeting or exceeding targets!")
+
+    with col_action:
+        render_section_header("⚡ Continue Preparation", "Next recommended task deterministically prioritized for you")
+        rec = data.get("recommended_action", {})
+        action_type = rec.get("action_type", "").upper()
+
+        if action_type in ("PRACTICE", "FOCUSED_ASSESSMENT"):
+            target_nav_page = "Skills & Topic Practice"
+        elif action_type == "RESUME":
+            target_nav_page = "Resume / CV"
+        elif action_type in ("IMPROVEMENT_PLAN", "LEARNING"):
+            target_nav_page = "Personalized Improvement Plan"
+        elif action_type == "ASSESSMENT":
+            target_nav_page = "Personalized Assessment"
+        elif action_type == "JOB":
+            target_nav_page = "Target Job"
+        else:
+            target_nav_page = "Skills & Topic Practice"
+
+        render_html(
+            f"""
+            <div class="saas-panel" style="margin-bottom: 0.75rem;">
+                <div style="font-size: 0.72rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem;">
+                    RECOMMENDED TASK
+                </div>
+                <div style="font-size: 1.05rem; font-weight: 700; color: var(--text-primary); margin-bottom: 0.4rem;">
+                    {rec.get('title', 'Adaptive Practice Session')}
+                </div>
+                <div style="font-size: 0.84rem; color: var(--text-secondary); margin-bottom: 0.45rem;">
+                    <strong>Why:</strong> {rec.get('reason', 'Targeted reinforcement for placement readiness')}
+                </div>
+                <div style="font-size: 0.8rem; color: var(--text-muted); line-height: 1.4;">
+                    {rec.get('description', '')}
+                </div>
+            </div>
+            """
+        )
+
+        btn_label = f"Start: {rec.get('title', 'Continue')[:28]} →"
+        if st.button(btn_label, type="primary", use_container_width=True, key="dashboard_continue_btn"):
+            if rec.get("skill_name"):
+                st.session_state["focus_skill"] = rec.get("skill_name")
+            if rec.get("topic"):
+                st.session_state["focus_topic"] = rec.get("topic")
+            st.session_state["pending_nav"] = target_nav_page
+            st.rerun()
+
+    st.write("")
+    st.markdown("---")
+
+    # -------------------------------------------------------------
+    # 4. RECENT ACTIVITY (Clean Pure-CSS Tables, Zero Iframes)
+    # -------------------------------------------------------------
+    render_section_header("📜 Recent Activity", "Track your latest assessments and practice milestones")
+    
+    col_asm, col_prac = st.columns(2)
+    with col_asm:
+        render_html("<div style='font-size: 0.88rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.4rem;'>Recent Assessments</div>")
+        recent_assessments = data.get("recent_assessment_results", [])
+        if recent_assessments:
+            headers = ["Role / Assessment", "Date", "Score", "Result"]
+            rows = []
+            for asm in recent_assessments[:5]:
+                passed = asm.get("passed", False)
+                status_html = render_status_badge("Passed", "success") if passed else render_status_badge("Review", "warning")
+                score_str = f"<strong>{asm.get('score_percentage', 0.0)}%</strong> ({asm.get('correct_count')}/{asm.get('total_questions')})"
+                rows.append([
+                    f"<strong>{asm.get('role', 'Assessment')}</strong>",
+                    asm.get("completed_at", "N/A"),
+                    score_str,
+                    status_html
+                ])
+            render_styled_table(headers, rows)
+        else:
+            st.caption("No assessments completed yet. Take an assessment to record your verified baseline.")
+
+    with col_prac:
+        render_html("<div style='font-size: 0.88rem; font-weight: 600; color: var(--text-primary); margin-bottom: 0.4rem;'>Recent Practice Sessions</div>")
+        recent_practice = data.get("recent_practice_results", [])
+        if recent_practice:
+            headers = ["Skill", "Topic", "Date", "Score"]
+            rows = []
+            for prac in recent_practice[:5]:
+                score_val = prac.get("score_percentage", 0.0)
+                badge_type = "success" if score_val >= 80.0 else ("warning" if score_val >= 60.0 else "danger")
+                score_badge = render_status_badge(f"{score_val}%", badge_type)
+                rows.append([
+                    f"<strong>{prac.get('skill', 'General')}</strong>",
+                    prac.get("topic", "Core"),
+                    prac.get("completed_at", "N/A"),
+                    score_badge
+                ])
+            render_styled_table(headers, rows)
+        else:
+            st.caption("No practice sessions completed yet. Practice weak topics to build mastery.")

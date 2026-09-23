@@ -9,6 +9,7 @@ from backend.app.models.skill import Skill, StudentSkill
 from backend.app.schemas.ai import JobAnalysisResponse
 from backend.app.ai.ai_gateway import AIGateway
 from backend.app.core.logging import logger
+from backend.app.services.skill_service import SkillService
 
 
 class JobService:
@@ -100,12 +101,8 @@ class JobService:
             if not skill_name:
                 continue
 
-            skill = db.query(Skill).filter(Skill.name.ilike(skill_name)).first()
-            if not skill:
-                skill = Skill(name=skill_name, category=category)
-                db.add(skill)
-                db.commit()
-                db.refresh(skill)
+            # Standardize or insert canonical Skill
+            skill = SkillService.get_or_create_skill(db, skill_name, category)
 
             student_skill = db.query(StudentSkill).filter(
                 StudentSkill.user_id == user_id,
@@ -125,3 +122,26 @@ class JobService:
                 student_skill.is_required_by_jd = 1
 
         db.commit()
+
+    @staticmethod
+    def get_active_target_job(
+        db: Session,
+        user_id: int,
+        job_id: Optional[int] = None
+    ) -> Optional[JobDescription]:
+        """Fetch the single authoritative active target job for a candidate.
+        If job_id is provided, verify it belongs to user_id.
+        Otherwise, fetch the latest JobDescription for the user.
+        """
+        if job_id:
+            return (
+                db.query(JobDescription)
+                .filter(JobDescription.id == job_id, JobDescription.user_id == user_id)
+                .first()
+            )
+        return (
+            db.query(JobDescription)
+            .filter(JobDescription.user_id == user_id)
+            .order_by(JobDescription.id.desc())
+            .first()
+        )

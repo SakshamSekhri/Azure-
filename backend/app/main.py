@@ -16,6 +16,31 @@ async def lifespan(app: FastAPI):
     logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}...")
     logger.info(f"[DATABASE] Connected to SQLite database at: {settings.DATABASE_URL}")
     Base.metadata.create_all(bind=engine)
+    # Ensure new columns exist on existing SQLite databases
+    try:
+        from sqlalchemy import inspect as sqla_inspect, text
+        inspector = sqla_inspect(engine)
+        table_names = inspector.get_table_names()
+        with engine.connect() as conn:
+            if "assessments" in table_names:
+                cols = {c["name"] for c in inspector.get_columns("assessments")}
+                if "assessment_mode" not in cols:
+                    conn.execute(text("ALTER TABLE assessments ADD COLUMN assessment_mode VARCHAR(50) DEFAULT 'full_assessment'"))
+                if "topic" not in cols:
+                    conn.execute(text("ALTER TABLE assessments ADD COLUMN topic VARCHAR(100)"))
+                if "canonical_skill_id" not in cols:
+                    conn.execute(text("ALTER TABLE assessments ADD COLUMN canonical_skill_id VARCHAR(100)"))
+            if "assessment_attempts" in table_names:
+                cols_att = {c["name"] for c in inspector.get_columns("assessment_attempts")}
+                if "analysis_status" not in cols_att:
+                    conn.execute(text("ALTER TABLE assessment_attempts ADD COLUMN analysis_status VARCHAR(50) DEFAULT 'pending'"))
+            if "assessment_answers" in table_names:
+                cols_ans = {c["name"] for c in inspector.get_columns("assessment_answers")}
+                if "attempt_id" not in cols_ans:
+                    conn.execute(text("ALTER TABLE assessment_answers ADD COLUMN attempt_id INTEGER"))
+            conn.commit()
+    except Exception as e:
+        logger.warning(f"SQLite migration check warning: {e}")
     logger.info("Database tables verified/created.")
     yield
     # Shutdown

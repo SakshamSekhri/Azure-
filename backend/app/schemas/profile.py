@@ -11,7 +11,7 @@ class ProfileBase(BaseModel):
     college: Optional[str] = None
     degree: Optional[str] = None
     graduation_year: Optional[int] = None
-    target_role: str = Field(default="Full Stack Developer")
+    target_role: Optional[str] = Field(default=None)
     experience_level: str = Field(default="Entry Level")
     github_username: Optional[str] = None
 

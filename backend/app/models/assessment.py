@@ -16,7 +16,10 @@ class Assessment(Base):
     difficulty = Column(String(50), default="Intermediate", nullable=False)  # Beginner, Intermediate, Advanced
     question_count = Column(Integer, default=5, nullable=False)
     status = Column(String(50), default="pending", nullable=False)  # pending, completed
-    questions_json = Column(JSON, nullable=False)  # List of questions with options, correct answer, explanation, skill/topic
+    assessment_mode = Column(String(50), default="full_assessment", nullable=False, index=True)  # full_assessment, practice, focused_assessment
+    topic = Column(String(100), nullable=True, index=True)
+    canonical_skill_id = Column(String(100), nullable=True, index=True)
+    questions_json = Column(JSON, nullable=True)  # Legacy compatibility column; AssessmentQuestion is authoritative (Requirement 11)
     metadata_json = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 

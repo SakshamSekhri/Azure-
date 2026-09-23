@@ -83,13 +83,7 @@ class AzureSearchClient:
                 scored_docs.append((score, doc))
 
         scored_docs.sort(key=lambda x: x[0], reverse=True)
-        results = [doc for _, doc in scored_docs[:top]]
-        
-        # If no strict term match, return first 2 general docs if query isn't empty
-        if not results and query:
-            results = EDUCATIONAL_DOCUMENTS[:top]
-
-        return results
+        return [doc for _, doc in scored_docs[:top]]
 
 
 azure_search_client = AzureSearchClient()

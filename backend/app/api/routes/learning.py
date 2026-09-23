@@ -8,7 +8,7 @@ from backend.app.models.user import User
 from backend.app.schemas.learning import (
     LearningPlanGenerateRequest, LearningPlanDetailResponse,
     LearningActivityResponse, LearningActivityToggleRequest,
-    RAGQueryRequest, GroundedRAGResponse
+    RAGQueryRequest, GroundedRAGResponse, PersonalizedImprovementPlanResponse
 )
 from backend.app.services.learning_service import LearningService
 
@@ -22,6 +22,25 @@ def get_current_plan(
 ):
     """Retrieve active 7-day personalized learning plan."""
     return LearningService.get_current_plan(db, current_user.id)
+
+
+@router.get("/improvement-plan", response_model=PersonalizedImprovementPlanResponse)
+def get_dynamic_improvement_plan(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve dynamically prioritized improvement plan based on real-time readiness and gap analysis."""
+    return LearningService.get_dynamic_improvement_plan(db, current_user.id)
+
+
+@router.get("/plan/{plan_id}", response_model=LearningPlanDetailResponse)
+def get_plan_by_id(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Retrieve a specific learning plan, strictly verifying candidate ownership (Requirement 12)."""
+    return LearningService.get_plan_by_id(db, current_user.id, plan_id)
 
 
 @router.post("/plan/generate", response_model=LearningPlanDetailResponse)

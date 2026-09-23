@@ -11,6 +11,7 @@ class SkillCreate(BaseModel):
 
 class SkillResponse(BaseModel):
     id: int
+    canonical_id: Optional[str] = None
     name: str
     category: str
     description: Optional[str] = None
@@ -22,6 +23,7 @@ class SkillResponse(BaseModel):
 class StudentSkillResponse(BaseModel):
     id: int
     skill_id: int
+    canonical_id: Optional[str] = None
     skill_name: str
     category: str
     claimed_level: Optional[str] = None
@@ -39,6 +41,7 @@ class StudentSkillResponse(BaseModel):
 
 class SkillMatrixItem(BaseModel):
     skill_id: int
+    canonical_id: Optional[str] = None
     skill_name: str
     category: str
     claimed: bool
@@ -66,6 +69,7 @@ class RecommendedActionResponse(BaseModel):
     description: str
     reason: str
     skill_name: Optional[str] = None
+    topic: Optional[str] = None
     target_route: str
 
 

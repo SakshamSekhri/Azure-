@@ -10,6 +10,7 @@ from backend.app.schemas.ai import ResumeAnalysisResponse
 from backend.app.ai.ai_gateway import AIGateway
 from backend.app.utils.text_extractor import extract_text_from_file, compute_file_hash
 from backend.app.core.logging import logger
+from backend.app.services.skill_service import SkillService
 
 
 class ResumeService:
@@ -105,13 +106,8 @@ class ResumeService:
             if not skill_name:
                 continue
 
-            # Standardize or insert Skill
-            skill = db.query(Skill).filter(Skill.name.ilike(skill_name)).first()
-            if not skill:
-                skill = Skill(name=skill_name, category=category)
-                db.add(skill)
-                db.commit()
-                db.refresh(skill)
+            # Standardize or insert canonical Skill
+            skill = SkillService.get_or_create_skill(db, skill_name, category)
 
             # Insert or update StudentSkill
             student_skill = db.query(StudentSkill).filter(

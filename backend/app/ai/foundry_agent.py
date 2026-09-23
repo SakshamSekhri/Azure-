@@ -22,20 +22,24 @@ from backend.app.ai.prompts import (
     RAG_ANSWER_SYSTEM_PROMPT
 )
 
-# Ensure Azure CLI wbin directory is in PATH for current process
-_azure_cli_dir = r"C:\Program Files\Microsoft SDKs\Azure\CLI2\wbin"
-if os.path.isdir(_azure_cli_dir) and _azure_cli_dir.lower() not in os.environ.get("PATH", "").lower():
-    os.environ["PATH"] = f"{_azure_cli_dir};{os.environ.get('PATH', '')}"
+# Portable Azure CLI discovery across Windows, Linux, Docker, and CI/CD
+import shutil
+from pathlib import Path
 
-# Ensure Azure CLI config and token cache are preserved
-_possible_azure_dirs = [
-    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))), ".azure"),
-    r"E:\Azure 2\.azure"
-]
-for _candidate in _possible_azure_dirs:
-    if os.path.isdir(_candidate) and "AZURE_CONFIG_DIR" not in os.environ:
-        os.environ["AZURE_CONFIG_DIR"] = _candidate
-        break
+_custom_cli_path = os.environ.get("AZURE_CLI_PATH")
+if _custom_cli_path and os.path.isdir(_custom_cli_path):
+    if _custom_cli_path.lower() not in os.environ.get("PATH", "").lower():
+        os.environ["PATH"] = f"{_custom_cli_path};{os.environ.get('PATH', '')}"
+elif os.name == "nt" and not shutil.which("az"):
+    _prog_files = os.environ.get("ProgramFiles", r"C:\Program Files")
+    _candidate_cli = Path(_prog_files) / "Microsoft SDKs" / "Azure" / "CLI2" / "wbin"
+    if _candidate_cli.is_dir():
+        os.environ["PATH"] = f"{_candidate_cli.as_posix()};{os.environ.get('PATH', '')}"
+
+# Project-relative Azure configuration directory fallback if present
+_project_azure_dir = Path(__file__).resolve().parent.parent.parent.parent / ".azure"
+if _project_azure_dir.is_dir() and "AZURE_CONFIG_DIR" not in os.environ:
+    os.environ["AZURE_CONFIG_DIR"] = str(_project_azure_dir)
 
 
 class AzureFoundryAgentClient:

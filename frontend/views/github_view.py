@@ -2,10 +2,13 @@ import streamlit as st
 from frontend.components.api_client import api
 
 
+from frontend.components.ui import render_html
+
+
 def render_github_view():
     st.markdown("### 🐙 Public GitHub Evidence Collection")
     st.markdown("Connect your public GitHub username to extract supporting code evidence from your repositories.")
-    st.markdown("<span class='credit-pill'>🔒 Supporting Evidence Only — Explicitly Not Proof of Mastery</span>", unsafe_allow_html=True)
+    render_html("<span class='credit-pill'>🔒 Supporting Evidence Only — Explicitly Not Proof of Mastery</span>")
 
     try:
         profile = api.get_profile()
@@ -45,10 +48,9 @@ def render_github_view():
         c3.metric("Frameworks Identified", len(res.get("detected_frameworks", [])))
 
         st.markdown("##### Detected Languages & Technologies")
-        for lang in res.get("primary_languages", []):
-            st.markdown(f"<span class='metric-badge badge-info'>{lang}</span>", unsafe_allow_html=True)
-        for fw in res.get("detected_frameworks", []):
-            st.markdown(f"<span class='metric-badge badge-high'>{fw}</span>", unsafe_allow_html=True)
+        badges_html = " ".join([f"<span class='saas-badge saas-badge-info'>{lang}</span>" for lang in res.get("primary_languages", [])])
+        badges_html += " " + " ".join([f"<span class='saas-badge saas-badge-success'>{fw}</span>" for fw in res.get("detected_frameworks", [])])
+        render_html(f"<div>{badges_html}</div>")
 
         st.markdown("##### 📁 Inspected Repositories")
         for r in res.get("repos", []):

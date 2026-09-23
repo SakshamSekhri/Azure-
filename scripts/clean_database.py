@@ -8,10 +8,9 @@ import os
 import sqlite3
 import json
 
-sys.path.insert(0, os.path.abspath("."))
+from pathlib import Path
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DB_PATH = os.environ.get("DATABASE_PATH", os.path.join(BASE_DIR, "placement_prep.db"))
+DB_PATH = str((Path(__file__).resolve().parent.parent / "placement_prep.db").resolve())
 
 
 def clean_and_migrate():

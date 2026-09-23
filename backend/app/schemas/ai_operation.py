@@ -6,12 +6,18 @@ from pydantic import BaseModel
 class AIOperationResponse(BaseModel):
     id: int
     operation_id: str
-    user_id: int
+    user_id: Optional[int] = None
     operation_type: str
+    model: Optional[str] = None
+    prompt_version: Optional[str] = None
     prompt_hash: str
     status: str
-    tokens_used: int
-    duration_ms: float
+    input_tokens: int = 0
+    output_tokens: int = 0
+    tokens_used: int = 0
+    duration_ms: float = 0.0
+    cache_hit: bool = False
+    estimated_cost: float = 0.0
     error_message: Optional[str] = None
     created_at: datetime
     request_metadata: Optional[Dict[str, Any]] = None

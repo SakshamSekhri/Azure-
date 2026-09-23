@@ -6,18 +6,57 @@ from backend.app.models.skill import Skill, StudentSkill
 from backend.app.models.evidence import Evidence
 from backend.app.models.profile import StudentProfile
 from backend.app.models.assessment import Assessment
+from backend.app.models.assessment_answer import AssessmentAnswer
+from backend.app.models.assessment_question import AssessmentQuestion
 from backend.app.schemas.skill import (
     SkillMatrixItem, SkillGapResponse, RecommendedActionResponse,
     CandidateJDSkillItem, CandidateJDComparisonResponse
 )
 from backend.app.models.job import JobDescription
 from backend.app.models.resume import Resume
+from backend.app.services.skill_canonicalizer import canonicalize_skill, CanonicalSkill
 
 
 class SkillService:
     @staticmethod
+    def get_or_create_skill(db: Session, raw_name: str, category_hint: Optional[str] = None) -> Skill:
+        """Find or insert a canonicalized skill. Ensures canonical_id and aliases are populated."""
+        canon = canonicalize_skill(raw_name, category_hint)
+        skill = (
+            db.query(Skill)
+            .filter(
+                (Skill.canonical_id == canon.canonical_id) |
+                (Skill.name.ilike(canon.display_name)) |
+                (Skill.name.ilike(raw_name.strip()))
+            )
+            .first()
+        )
+        if not skill:
+            skill = Skill(
+                canonical_id=canon.canonical_id,
+                name=canon.display_name,
+                category=canon.category,
+                aliases=canon.aliases
+            )
+            db.add(skill)
+            db.flush()
+        else:
+            updated = False
+            if not skill.canonical_id:
+                skill.canonical_id = canon.canonical_id
+                updated = True
+            if not skill.aliases:
+                skill.aliases = canon.aliases
+                updated = True
+            if updated:
+                db.flush()
+        return skill
+
+    @staticmethod
     def get_skill_matrix(db: Session, user_id: int) -> List[SkillMatrixItem]:
-        """Comparison of Claimed vs GitHub Evidence vs Objective Assessment Score."""
+        """Comparison of Claimed vs GitHub Evidence vs Objective Assessment Score.
+        Enforces Requirement 4 (Canonical Skills) and Requirement 5 (Multi-source Skill Evidence).
+        """
         student_skills = (
             db.query(StudentSkill)
             .join(Skill, StudentSkill.skill_id == Skill.id)
@@ -28,8 +67,13 @@ class SkillService:
         matrix: List[SkillMatrixItem] = []
         for ss in student_skills:
             skill = ss.skill
+            if not skill.canonical_id:
+                canon = canonicalize_skill(skill.name, skill.category)
+                skill.canonical_id = canon.canonical_id
+                skill.aliases = canon.aliases
+                db.flush()
 
-            # Check GitHub evidence for this skill
+            # Multi-source evidence tracking
             has_github = (
                 db.query(Evidence)
                 .filter(
@@ -40,19 +84,40 @@ class SkillService:
                 .count() > 0
             )
 
-            # Confidence & Status calculation
+            # Check candidate question sample size for this skill
+            q_count = (
+                db.query(AssessmentAnswer)
+                .join(AssessmentQuestion, AssessmentAnswer.question_id == AssessmentQuestion.id)
+                .filter(
+                    AssessmentAnswer.candidate_id == user_id,
+                    (AssessmentQuestion.skill.ilike(skill.name) | (AssessmentQuestion.canonical_skill_id == skill.canonical_id))
+                )
+                .count()
+            )
+
             score = ss.assessment_score
             claimed = bool(ss.is_claimed)
-            
-            # Confidence logic:
-            # High: Assessment >= 75% OR (Assessment >= 65% and has_github and claimed)
-            # Medium: Assessment between 50-74% OR (claimed and has_github without assessment)
-            # Low: Assessment < 50% OR claimed without evidence/assessment
-            # None: neither claimed nor assessed
+
+            # Requirement 5: Confidence & Demonstrated Level Calibration
+            # Never label someone "Advanced" or "High" confidence from a single MCQ without corroboration
             if score is not None:
-                if score >= 75.0 or (score >= 65.0 and has_github and claimed):
-                    confidence = "High"
-                    status = "Ready"
+                if score >= 80.0:
+                    if q_count >= 2 or (has_github and claimed):
+                        demonstrated = "Advanced"
+                    else:
+                        demonstrated = "Intermediate"
+                elif score >= 60.0:
+                    demonstrated = "Intermediate"
+                else:
+                    demonstrated = "Beginner"
+
+                if score >= 75.0:
+                    if q_count >= 2 or (has_github and claimed):
+                        confidence = "High"
+                        status = "Ready"
+                    else:
+                        confidence = "Medium"
+                        status = "Needs Practice"
                 elif score >= 50.0:
                     confidence = "Medium"
                     status = "Needs Practice"
@@ -60,6 +125,7 @@ class SkillService:
                     confidence = "Low"
                     status = "Critical Gap"
             else:
+                demonstrated = ss.demonstrated_level or "Unassessed"
                 if claimed and has_github:
                     confidence = "Medium"
                     status = "Unassessed (Has Evidence)"
@@ -70,22 +136,20 @@ class SkillService:
                     confidence = "None"
                     status = "Required Missing"
 
-            if score is not None and not ss.demonstrated_level:
-                ss.demonstrated_level = "Advanced" if score >= 80.0 else ("Intermediate" if score >= 60.0 else "Beginner")
-
-            # Update student skill confidence if changed
+            ss.demonstrated_level = demonstrated
             if ss.confidence != confidence:
                 ss.confidence = confidence
                 ss.last_updated = datetime.now(timezone.utc)
 
             matrix.append(SkillMatrixItem(
                 skill_id=skill.id,
+                canonical_id=skill.canonical_id,
                 skill_name=skill.name,
                 category=skill.category,
                 claimed=claimed,
                 github_evidence=has_github,
                 assessment_score=score,
-                demonstrated_level=ss.demonstrated_level,
+                demonstrated_level=demonstrated,
                 confidence=confidence,
                 status=status,
                 evidence_count=ss.evidence_count
@@ -97,8 +161,10 @@ class SkillService:
     @staticmethod
     def calculate_skill_gaps(db: Session, user_id: int) -> SkillGapResponse:
         """Identification of verified strengths and gaps."""
+        from backend.app.services.job_service import JobService
+        latest_jd = JobService.get_active_target_job(db, user_id)
         profile = db.query(StudentProfile).filter(StudentProfile.user_id == user_id).first()
-        target_role = profile.target_role if profile else "Software Engineer"
+        target_role = (latest_jd.title if latest_jd and latest_jd.title else None) or (profile.target_role if profile and profile.target_role else None) or "Candidate"
 
         matrix = SkillService.get_skill_matrix(db, user_id)
 
@@ -127,11 +193,12 @@ class SkillService:
         - Not Relevant
         Never claims an unknown skill is possessed by the candidate.
         """
+        from backend.app.services.job_service import JobService
+        latest_jd = JobService.get_active_target_job(db, user_id)
         profile = db.query(StudentProfile).filter(StudentProfile.user_id == user_id).first()
-        target_role = profile.target_role if profile else "Software Engineer"
+        target_role = (latest_jd.title if latest_jd and latest_jd.title else None) or (profile.target_role if profile and profile.target_role else None) or "Candidate"
 
         # 1. Fetch latest JD requirements
-        latest_jd = db.query(JobDescription).filter(JobDescription.user_id == user_id).order_by(JobDescription.id.desc()).first()
         jd_skills_dict = {}
 
         if latest_jd and latest_jd.parsed_data:
@@ -166,7 +233,14 @@ class SkillService:
 
         # 2. Fetch candidate's verified skills & assessment scores
         matrix = SkillService.get_skill_matrix(db, user_id)
-        candidate_skills_map = {m.skill_name.lower(): m for m in matrix}
+        candidate_skills_map = {}
+        for m in matrix:
+            if m.canonical_id:
+                candidate_skills_map[m.canonical_id] = m
+            candidate_skills_map[m.skill_name.lower()] = m
+            # Also index aliases
+            canon = canonicalize_skill(m.skill_name, m.category)
+            candidate_skills_map[canon.canonical_id] = m
 
         items: List[CandidateJDSkillItem] = []
         evidence_found: List[str] = []
@@ -179,7 +253,8 @@ class SkillService:
             category = jd_meta["category"]
             importance = jd_meta["importance"]
 
-            m_item = candidate_skills_map.get(key)
+            canon = canonicalize_skill(name, category)
+            m_item = candidate_skills_map.get(canon.canonical_id) or candidate_skills_map.get(key) or candidate_skills_map.get(name.lower())
             if m_item:
                 score = m_item.assessment_score
                 has_github = m_item.github_evidence
@@ -283,41 +358,67 @@ class SkillService:
         if critical_tested_gaps:
             top_gap = critical_tested_gaps[0]
             return RecommendedActionResponse(
-                action_type="LEARNING",
-                title=f"Review & Practice: {top_gap.skill_name}",
-                description=f"Your assessment score for {top_gap.skill_name} was {top_gap.assessment_score}%. Follow the targeted improvement plan.",
+                action_type="PRACTICE",
+                title=f"Practice: {top_gap.skill_name}",
+                description=f"Your assessment score for {top_gap.skill_name} was {top_gap.assessment_score}%. Sharpen core concepts with an adaptive 5-question practice session.",
                 reason=f"{top_gap.skill_name} is currently a Critical Gap.",
                 skill_name=top_gap.skill_name,
-                target_route="Personalized Improvement Plan"
+                target_route="🎯 Skill & Topic Practice"
             )
 
-        # 3. Check for claimed skills that are unassessed
+        # 3. Check for unpracticed critical JD gaps
+        comp = SkillService.compare_candidate_vs_jd(db, user_id)
+        if comp.skill_gaps:
+            top_gap = comp.skill_gaps[0]
+            return RecommendedActionResponse(
+                action_type="PRACTICE",
+                title=f"Practice {top_gap} (Target JD Gap)",
+                description=f"{top_gap} is a key requirement for your target job description. Build foundational proficiency with targeted practice.",
+                reason=f"{top_gap} is required by your target job description.",
+                skill_name=top_gap,
+                target_route="🎯 Skill & Topic Practice"
+            )
+
+        # 4. Check for claimed skills that are unassessed
         unassessed_skills = [m for m in matrix if m.assessment_score is None and m.claimed]
         if unassessed_skills:
             top_unassessed = unassessed_skills[0]
             return RecommendedActionResponse(
-                action_type="ASSESSMENT",
-                title=f"Take Personalized Assessment on {top_unassessed.skill_name}",
-                description=f"Validate your claimed {top_unassessed.skill_name} proficiency with an objective personalized assessment.",
-                reason="Claimed in resume, but missing objective assessment proof.",
+                action_type="PRACTICE",
+                title=f"Practice {top_unassessed.skill_name}",
+                description=f"Validate your claimed {top_unassessed.skill_name} proficiency with an adaptive practice session.",
+                reason="Claimed in resume, but missing objective practice/assessment proof.",
                 skill_name=top_unassessed.skill_name,
-                target_route="Personalized Assessment"
+                target_route="🎯 Skill & Topic Practice"
             )
 
-        # 4. Check for medium confidence skills (50-74%) -> Recommend taking personalized assessment
+        # 5. Check for high-performing skills (>= 75%) eligible for focused assessment
+        ready_skills = [m for m in matrix if m.assessment_score is not None and m.assessment_score >= 75.0]
+        if ready_skills:
+            top_ready = ready_skills[0]
+            return RecommendedActionResponse(
+                action_type="FOCUSED_ASSESSMENT",
+                title=f"Take Focused Assessment on {top_ready.skill_name}",
+                description=f"Demonstrated high score ({top_ready.assessment_score}%). Solidify your placement credential with a comprehensive 10-question evaluation.",
+                reason=f"{top_ready.skill_name} demonstrated strong topic proficiency.",
+                skill_name=top_ready.skill_name,
+                target_route="🎯 Skill & Topic Practice"
+            )
+
+        # 6. Check for medium confidence skills (50-74%) -> Recommend practice
         moderate_skills = [m for m in matrix if m.confidence == "Medium"]
         if moderate_skills:
             target_skill = moderate_skills[0]
             return RecommendedActionResponse(
-                action_type="ASSESSMENT",
-                title=f"Reassess {target_skill.skill_name}",
-                description=f"Complete a personalized assessment to elevate your demonstrated confidence from Medium to High.",
+                action_type="PRACTICE",
+                title=f"Practice {target_skill.skill_name}",
+                description=f"Complete targeted practice on {target_skill.skill_name} to elevate your demonstrated confidence from Medium to High.",
                 reason=f"{target_skill.skill_name} has moderate confidence.",
                 skill_name=target_skill.skill_name,
-                target_route="Personalized Assessment"
+                target_route="🎯 Skill & Topic Practice"
             )
 
-        # 5. Otherwise, recommend reviewing personalized improvement plan
+        # 7. Otherwise, recommend reviewing personalized improvement plan
         return RecommendedActionResponse(
             action_type="IMPROVEMENT_PLAN",
             title="Review Personalized Improvement Plan",

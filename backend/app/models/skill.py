@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, DateTime, UniqueConstraint, JSON
 from sqlalchemy.orm import relationship
 from backend.app.core.database import Base
 
@@ -8,8 +8,10 @@ class Skill(Base):
     __tablename__ = "skills"
 
     id = Column(Integer, primary_key=True, index=True)
+    canonical_id = Column(String(100), index=True, nullable=True)  # Normalized canonical identifier (e.g. 'react', 'postgresql')
     name = Column(String(100), unique=True, index=True, nullable=False)
     category = Column(String(50), index=True, nullable=False)  # Programming, Framework, Database, etc.
+    aliases = Column(JSON, nullable=True)  # Known aliases for this canonical skill
     description = Column(String(255), nullable=True)
 
     student_skills = relationship("StudentSkill", back_populates="skill", cascade="all, delete-orphan")

@@ -6,7 +6,11 @@ from backend.app.schemas.skill import SkillMatrixItem, RecommendedActionResponse
 class DashboardSummaryResponse(BaseModel):
     student_name: str
     target_role: str
+    target_company: Optional[str] = None
     overall_preparation_score: float  # 0 to 100
+    resume_match_percentage: float = 0.0
+    jd_coverage_percentage: float = 0.0
+    technical_knowledge_percentage: float = 0.0
     total_skills_tracked: int
     assessed_skills_count: int
     strong_skills_count: int
@@ -20,5 +24,8 @@ class DashboardSummaryResponse(BaseModel):
     top_gaps: List[str] = []
     recommended_action: RecommendedActionResponse
     skill_matrix: List[SkillMatrixItem] = []
+    progress_history: List[Dict[str, Any]] = []
+    recent_assessment_results: List[Dict[str, Any]] = []
+    recent_practice_results: List[Dict[str, Any]] = []
     has_active_plan: bool = False
     plan_id: Optional[int] = None

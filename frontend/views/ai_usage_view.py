@@ -1,112 +1,138 @@
 import streamlit as st
-import streamlit.components.v1 as components
 from frontend.components.api_client import api
-
-TABLE_CSS = """
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-* { font-family: 'Inter', sans-serif; box-sizing: border-box; }
-.styled-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-.styled-table th { background-color: #f8fafc; border-bottom: 2px solid #e2e8f0; text-align: left; padding: 0.75rem; font-weight: 600; color: #475569; }
-.styled-table td { padding: 0.75rem; border-bottom: 1px solid #e2e8f0; color: #1e293b; }
-.styled-table tr:hover td { background-color: #f8fafc; }
-.metric-badge { display: inline-block; font-size: 0.78rem; font-weight: 600; padding: 0.2rem 0.55rem; border-radius: 9999px; }
-.badge-high   { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
-.badge-medium { background: #fef9c3; color: #854d0e; border: 1px solid #fef08a; }
-.badge-low    { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-.badge-info   { background: #e0f2fe; color: #0369a1; border: 1px solid #bae6fd; }
-code { background: #f1f5f9; border-radius: 4px; padding: 0.15rem 0.4rem; font-size: 0.8rem; color: #0f172a; }
-</style>
-"""
+from frontend.components.ui import (
+    render_page_header,
+    render_section_header,
+    render_progress_bar,
+    render_status_badge,
+    render_empty_state,
+    render_styled_table,
+    render_html
+)
 
 
 def render_ai_usage_view():
-    st.markdown("### 💳 AI Credit Control & Audit Dashboard")
-    st.markdown("Transparent real-time telemetry on Azure AI Foundry consumption, SHA-256 cache hits, and token usage.")
+    render_page_header(
+        title="Usage & Credit Audit",
+        subtitle="Real-time telemetry on Azure AI Foundry consumption, SHA-256 cache hits, and token usage."
+    )
 
     try:
         usage = api.get_ai_usage()
     except Exception as e:
-        st.error(f"Failed to load AI usage: {str(e)}")
+        render_empty_state("Telemetry Offline", f"Could not load AI usage metrics: {str(e)}", icon="⚠️")
         return
 
-    # Top Metrics Cards
-    c1, c2, c3, c4 = st.columns(4)
+    cost = usage.get("estimated_cost_usd", 0.0)
+    budget = 10.00
+    used_pct = min(100.0, round((cost / budget) * 100.0, 2))
+    remaining = max(0.0, budget - cost)
+
+    # -------------------------------------------------------------
+    # 1. TOP USAGE BUDGET PANEL
+    # -------------------------------------------------------------
+    render_html(
+        f"""
+        <div class="saas-panel">
+            <div style="font-size: 0.72rem; font-weight: 700; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.2rem;">
+                AI CREDIT CONSUMPTION
+            </div>
+            <div style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap;">
+                <h2 style="margin: 0; font-size: 1.5rem; font-weight: 700; color: var(--text-primary);">
+                    &dollar;{cost:.4f} <span style="font-size: 0.95rem; font-weight: 500; color: var(--text-secondary);">/ &dollar;{budget:.2f} Allocated</span>
+                </h2>
+                <span style="font-size: 0.85rem; font-weight: 600; color: #10B981;">&dollar;{remaining:.4f} remaining</span>
+            </div>
+            <div class="saas-bar-track" style="height: 7px; margin-top: 0.5rem; margin-bottom: 0.35rem;">
+                <div class="saas-bar-fill" style="width: {used_pct}%; background-color: var(--accent);"></div>
+            </div>
+            <div style="font-size: 0.78rem; color: var(--text-secondary);">
+                Telemetry computed strictly from token usage via Azure AI Foundry and local cache audits.
+            </div>
+        </div>
+        """
+    )
+
+    # -------------------------------------------------------------
+    # 2. KEY METRICS ROW
+    # -------------------------------------------------------------
+    c1, c2, c3 = st.columns(3)
     with c1:
-        st.metric("Total AI Requests", usage.get("total_operations", 0))
+        st.metric("Total AI Operations", usage.get("total_operations", 0))
     with c2:
-        hit_rate = usage.get("cache_hit_rate_percentage", 0.0)
-        st.metric("Cache Hit Rate", f"{hit_rate}%", delta=f"{usage.get('cached_calls', 0)} calls saved")
+        hit_rate = round(usage.get("cache_hit_rate_percentage", 0.0), 1)
+        st.metric("Cache Hit Rate", f"{hit_rate}%", delta=f"{usage.get('cached_calls', 0)} calls saved (0 tokens)")
     with c3:
         st.metric("Tokens Consumed", f"{usage.get('total_tokens_used', 0):,}")
-    with c4:
-        cost = usage.get("estimated_cost_usd", 0.0)
-        st.metric("Est. Azure Cost", f"${cost:.4f}")
 
+    st.write("")
     st.markdown("---")
 
-    col_breakdown, col_info = st.columns([1, 1])
-    with col_breakdown:
-        st.markdown("##### 📊 Operations Breakdown by Type")
-        ops_by_type = usage.get("operations_by_type", {})
-        if ops_by_type:
-            for op_type, count in ops_by_type.items():
-                st.markdown(f"- **{op_type}**: `{count}` operations")
+    # -------------------------------------------------------------
+    # 3. USAGE BY SERVICE & OPERATION TYPE
+    # -------------------------------------------------------------
+    col_ops, col_rules = st.columns(2)
+
+    with col_ops:
+        render_section_header("Usage by Operation Type")
+        ops = usage.get("operations_by_type", {})
+        total_ops = sum(ops.values()) if ops else 1
+
+        if ops:
+            for op_name, count in ops.items():
+                pct = round((count / total_ops) * 100.0, 1)
+                render_html(
+                    f"""
+                    <div style="margin-bottom: 0.6rem;">
+                        <div style="display: flex; justify-content: space-between; font-size: 0.84rem; margin-bottom: 0.2rem;">
+                            <span style="font-weight: 600; color: var(--text-primary);">{op_name}</span>
+                            <span style="color: var(--text-secondary);">{count} calls ({pct}%)</span>
+                        </div>
+                        <div class="saas-bar-track" style="height: 5px;">
+                            <div class="saas-bar-fill" style="width: {pct}%; background-color: var(--accent);"></div>
+                        </div>
+                    </div>
+                    """
+                )
         else:
-            st.info("No AI operations triggered yet.")
+            st.caption("No operations recorded yet.")
 
-    with col_info:
-        st.markdown("##### 🔒 Credit Control Guardrails Enforced")
-        st.markdown("""
-        - **SHA-256 Prompt Hashing**: Identical requests instantly return cached results with **0 new tokens**.
-        - **Single Persistent Agent**: Azure AI Foundry Agent Service runs with one persistent agent ID.
-        - **One-Shot Interaction**: Assessment generation and diagnostic result analyses are evaluated in single batch passes—no token-wasting conversation loops.
-        - **Strict Error Transparency**: If Azure AI Foundry fails or credentials expire, clear errors are returned immediately without silently serving stale or fake data.
-        """)
+    with col_rules:
+        render_section_header("Active Credit Control Guardrails")
+        st.markdown(
+            "- **SHA-256 Prompt Hashing**: Identical queries return cached results instantly with **0 tokens consumed**.\n"
+            "- **Single Persistent Agent**: Azure AI Foundry Agent runs with persistent state, preventing redundant initializations.\n"
+            "- **Batch Evaluation Pass**: Question generation and diagnostic analyses execute in single passes with no conversational token waste.\n"
+            "- **Transparent Failure Handling**: If API credentials expire, requests fail fast with clear errors instead of burning retries."
+        )
 
+    st.write("")
     st.markdown("---")
 
-    # Recent Audit Log Table
-    st.markdown("##### 📜 Recent AI Operation Audit Trail")
+    # -------------------------------------------------------------
+    # 4. RECENT AUDIT TRAIL TABLE (ZERO IFRAMES)
+    # -------------------------------------------------------------
+    render_section_header("Recent AI Operation Audit Log")
     recent = usage.get("recent_operations", [])
     if recent:
-        table_rows = []
-        for op in recent:
-            status_style = "badge-high" if op.get("status") == "SUCCESS" else ("badge-info" if op.get("status") == "CACHED" else "badge-low")
-            hash_short = op.get("prompt_hash", "")[:12] + "..."
-            duration = f"{op.get('duration_ms', 0):.1f} ms"
+        headers = ["Operation ID", "Type", "Status", "Prompt Hash", "Tokens", "Duration", "Timestamp"]
+        rows = []
+        for op in recent[:15]:
+            status = op.get("status", "SUCCESS")
+            status_var = "success" if status == "SUCCESS" else ("info" if status == "CACHED" else "danger")
+            status_badge = render_status_badge(status, status_var)
+            hash_short = f"<code>{op.get('prompt_hash', '')[:10]}...</code>"
+            dur = f"{op.get('duration_ms', 0):.1f} ms"
 
-            row_html = f"""
-            <tr>
-                <td><code>{op.get('operation_id')[:8]}...</code></td>
-                <td><strong>{op.get('operation_type')}</strong></td>
-                <td><span class="metric-badge {status_style}">{op.get('status')}</span></td>
-                <td><code>{hash_short}</code></td>
-                <td>{op.get('tokens_used')}</td>
-                <td>{duration}</td>
-                <td>{op.get('created_at')}</td>
-            </tr>
-            """
-            table_rows.append(row_html)
-
-        html_table = f"""
-        <table class="styled-table">
-            <thead>
-                <tr>
-                    <th>Op ID</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>SHA-256 Hash</th>
-                    <th>Tokens</th>
-                    <th>Latency</th>
-                    <th>Timestamp</th>
-                </tr>
-            </thead>
-            <tbody>
-                {''.join(table_rows)}
-            </tbody>
-        </table>
-        """
-        components.html(TABLE_CSS + html_table, height=max(200, 50 * len(recent) + 60), scrolling=True)
+            rows.append([
+                f"<code>{op.get('operation_id', '')[:8]}...</code>",
+                f"<strong>{op.get('operation_type')}</strong>",
+                status_badge,
+                hash_short,
+                op.get("tokens_used", 0),
+                dur,
+                str(op.get("created_at", ""))[:16].replace("T", " ")
+            ])
+        render_styled_table(headers, rows)
     else:
-        st.caption("No operations logged yet.")
+        st.caption("No recent operations logged.")
