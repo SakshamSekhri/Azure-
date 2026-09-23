@@ -1,11 +1,21 @@
+import os
 import requests
 from typing import Optional, Dict, Any, List
 import streamlit as st
 
 
 class APIClient:
-    def __init__(self, base_url: str = "http://127.0.0.1:8000/api/v1"):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, base_url: Optional[str] = None):
+        if not base_url:
+            backend_env = os.environ.get("BACKEND_URL")
+            if not backend_env and hasattr(st, "secrets") and "BACKEND_URL" in st.secrets:
+                backend_env = st.secrets["BACKEND_URL"]
+            base_url = backend_env or "http://127.0.0.1:8000/api/v1"
+        
+        base_url = base_url.rstrip("/")
+        if not base_url.endswith("/api/v1"):
+            base_url = f"{base_url}/api/v1"
+        self.base_url = base_url
 
     def _get_headers(self) -> Dict[str, str]:
         token = st.session_state.get("auth_token")
