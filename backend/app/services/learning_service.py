@@ -203,13 +203,40 @@ class LearningService:
         topic: Optional[str] = None,
         skill: Optional[str] = None
     ) -> GroundedRAGResponse:
-        """One-shot grounded RAG answer."""
-        # 1. Retrieve bounded educational documents
+        # 0. Determine Candidate Active Target Role
+        from backend.app.services.job_service import JobService
+        active_jd = JobService.get_active_target_job(db, user_id)
+        profile = db.query(StudentProfile).filter(StudentProfile.user_id == user_id).first()
+        active_role = (
+            (active_jd.title if active_jd and active_jd.title else None) or
+            (profile.target_role if profile and profile.target_role else None) or
+            "Placement Candidate"
+        )
+
+        # 1. Technical & Role Domain Guardrail Evaluation (Tier 3)
+        from backend.app.rag.guardrails import check_domain_guardrail
+        is_oob, oob_reason = check_domain_guardrail(query=question, active_role=active_role, topic=topic)
+        if is_oob:
+            logger.info(f"[GUARDRAIL TIER 3] Blocked out-of-bounds query '{question}' for role '{active_role}' (Reason: {oob_reason})")
+            return GroundedRAGResponse(
+                question=question,
+                answer=(
+                    f"This assistant is strictly dedicated to career placement preparation for {active_role}. "
+                    f"I cannot provide answers for inquiries outside your target domain (such as {oob_reason}). "
+                    f"Please ask a question related to {active_role} competencies, frameworks, or interview preparation."
+                ),
+                grounded=False,
+                citations=[],
+                confidence="None"
+            )
+
+        # 2. Retrieve bounded educational documents
         context_docs = retrieve_grounded_context(query=question, top_k=3, topic=topic)
 
-        # 2. Package into payload
+        # 3. Package into payload
         payload = {
             "question": question,
+            "target_role": active_role,
             "topic": topic,
             "skill": skill,
             "context_docs": context_docs

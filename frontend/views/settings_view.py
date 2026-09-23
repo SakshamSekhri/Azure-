@@ -102,13 +102,18 @@ def render_settings_view():
         backend_online = False
         backend_detail = "Offline"
 
-    foundry_configured = bool(settings.FOUNDRY_PROJECT_ENDPOINT)
-    search_configured = bool(settings.AZURE_AI_SEARCH_ENDPOINT and settings.AZURE_AI_SEARCH_KEY)
+    foundry_configured = bool(getattr(settings, "FOUNDRY_PROJECT_ENDPOINT", ""))
+    search_configured = bool(getattr(settings, "AZURE_AI_SEARCH_ENDPOINT", "") and getattr(settings, "AZURE_AI_SEARCH_KEY", ""))
+
+    agent_name = getattr(settings, "FOUNDRY_AGENT_NAME", "PlacementPreparationAgent")
+    agent_version = getattr(settings, "FOUNDRY_AGENT_VERSION", "4")
+    model_deployment = getattr(settings, "FOUNDRY_MODEL_DEPLOYMENT", "gpt-5-mini")
+    search_index = getattr(settings, "AZURE_AI_SEARCH_INDEX", "placement-prep-knowledge")
 
     connections = [
         ("FastAPI Backend Core", backend_detail, "success" if backend_online else "danger"),
-        (f"Azure AI Foundry Agent ({settings.FOUNDRY_AGENT_NAME})", f"Active on {settings.FOUNDRY_MODEL_DEPLOYMENT} (v{settings.FOUNDRY_AGENT_VERSION})", "success" if foundry_configured else "warning"),
-        ("RAG Knowledge Base", f"22-Module Curated Technical Repository Active" if not search_configured else f"Index '{settings.AZURE_AI_SEARCH_INDEX}'", "success")
+        (f"Azure AI Foundry Agent ({agent_name})", f"Active on {model_deployment} (v{agent_version})", "success" if foundry_configured else "warning"),
+        ("RAG Knowledge Base", f"22-Module Curated Technical Repository Active" if not search_configured else f"Index '{search_index}'", "success")
     ]
 
     for name, detail, var in connections:

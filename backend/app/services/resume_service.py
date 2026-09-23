@@ -99,6 +99,7 @@ class ResumeService:
             return
 
         skills_list = resume.parsed_data.get("skills", [])
+        seen_skill_ids = set()
         for item in skills_list:
             skill_name = item.get("name", "").strip()
             category = item.get("category", "Programming")
@@ -108,6 +109,12 @@ class ResumeService:
 
             # Standardize or insert canonical Skill
             skill = SkillService.get_or_create_skill(db, skill_name, category)
+            if not skill or not skill.id:
+                continue
+
+            if skill.id in seen_skill_ids:
+                continue
+            seen_skill_ids.add(skill.id)
 
             # Insert or update StudentSkill
             student_skill = db.query(StudentSkill).filter(
@@ -129,6 +136,8 @@ class ResumeService:
                 student_skill.claimed_level = claimed_level
                 student_skill.is_claimed = 1
 
+            db.flush()
+
             # Create Resume Evidence
             existing_ev = db.query(Evidence).filter(
                 Evidence.user_id == user_id,
@@ -148,11 +157,17 @@ class ResumeService:
                     evidence_strength=0.4
                 )
                 db.add(ev)
+                db.flush()
 
         # Also store Projects as general Evidence
         projects = resume.parsed_data.get("projects", [])
+        seen_projects = set()
         for proj in projects:
-            proj_name = proj.get("name", "Project")
+            proj_name = proj.get("name", "Project").strip()
+            if not proj_name or proj_name in seen_projects:
+                continue
+            seen_projects.add(proj_name)
+
             existing_proj_ev = db.query(Evidence).filter(
                 Evidence.user_id == user_id,
                 Evidence.type == "Project",
@@ -169,5 +184,6 @@ class ResumeService:
                     metadata_json=proj
                 )
                 db.add(p_ev)
+                db.flush()
 
         db.commit()

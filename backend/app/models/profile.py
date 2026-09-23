@@ -13,7 +13,7 @@ class StudentProfile(Base):
     college = Column(String(255), nullable=True)
     degree = Column(String(255), nullable=True)
     graduation_year = Column(Integer, nullable=True)
-    target_role = Column(String(255), nullable=True, default=None)
+    target_role = Column(String(255), nullable=True, default="")
     experience_level = Column(String(50), nullable=False, default="Entry Level")
     github_username = Column(String(255), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)

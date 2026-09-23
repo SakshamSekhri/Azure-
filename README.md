@@ -4,7 +4,7 @@
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.37+-FF4B4B.svg)](https://streamlit.io/)
 [![Azure AI Foundry](https://img.shields.io/badge/Azure_AI_Foundry-Integrated-0078D4.svg)](https://ai.azure.com/)
-[![Tests](https://img.shields.io/badge/Pytest-92%20Passed%20(100%25)-brightgreen.svg)](tests/)
+[![Tests](https://img.shields.io/badge/Pytest-96%20Passed%20(100%25)-brightgreen.svg)](tests/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![GitHub Issues](https://img.shields.io/github/issues/SakshamSekhri/Azure-)](https://github.com/SakshamSekhri/Azure-/issues)
 [![GitHub Stars](https://img.shields.io/github/stars/SakshamSekhri/Azure-)](https://github.com/SakshamSekhri/Azure-/stargazers)
@@ -43,18 +43,19 @@ Targeted Reassessment & Progress Tracking
 5. **Multi-Source Evidence Calibration**: Confidence is calibrated conservatively. A single high-scoring MCQ never inflates a skill to "Advanced" or "High" confidence without multi-question verification ($\ge 2$ samples) or corroborating code evidence.
 6. **Deterministic Scoring**: Scoring remains 100% in application Python code, never delegated to AI.
 7. **Strict Ownership Authorization**: All assessments, attempts, resumes, job descriptions, and learning plans enforce strict tenant/user ownership across every API route.
-8. **AI Gateway Telemetry & Prompt Versioning**: Every AI invocation tracks prompt version, model deployment, token counts, cache hits/misses, and estimated USD expenditure.
+8. **Domain Guardrails**: Built-in guardrails prevent prompt injections and keep student Q&A bounded strictly within engineering and placement readiness contexts.
+9. **AI Gateway Telemetry & Prompt Versioning**: Every AI invocation tracks prompt version, model deployment, token counts, cache hits/misses, and estimated USD expenditure.
 
 ---
 
 ## 🏗️ Technical Stack
 
-- **Backend**: Python 3.12+, FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic, SQLite / PostgreSQL, Bcrypt, PyJWT.
+- **Backend**: Python 3.12+, FastAPI, SQLAlchemy 2.0, Pydantic v2, Alembic, SQLite / PostgreSQL (Neon ready), Bcrypt, PyJWT.
 - **Frontend**: Streamlit with custom CSS command center, real-time KPI breakdown, and interactive skill gap matrix.
 - **AI Gateway**: Microsoft Azure AI Foundry Agent Service (`PlacementPreparationAgent` v4 on `gpt-5-mini`), SHA-256 context-and-version invalidating cache, token telemetry.
-- **RAG & Learning**: Curated educational knowledge base with Azure AI Search grounding.
+- **RAG & Learning**: Curated educational knowledge base with Azure AI Search grounding and domain safety guardrails.
 - **Security**: Strict production `SECRET_KEY` validation ($\ge 32$ chars), cross-platform Azure CLI discovery (`shutil.which("az")`), portable database path resolution.
-- **Testing**: Pytest with in-memory SQLite fixtures (92 tests, 100% pass rate).
+- **Testing**: Pytest with in-memory SQLite fixtures (96 tests, 100% pass rate).
 
 ---
 
@@ -88,13 +89,17 @@ Targeted Reassessment & Progress Tracking
 │       │   ├── assessment_service.py        # Dynamic question generation, validation, & scoring
 │       │   ├── learning_service.py          # Grounded 7-day curriculum generator
 │       │   └── ...
+│       ├── rag/                             # RAG retrieval and domain safety guardrails
+│       │   ├── guardrails.py                # Engineering & placement domain input validation
+│       │   ├── search.py                    # Azure AI Search integration
+│       │   └── knowledge_base.py            # Curated educational documents
 │       ├── ai/                              # AI Gateway, prompts, versions, and Foundry client
 │       └── api/routes/                      # Secured FastAPI REST API endpoints
 ├── frontend/
 │   ├── app.py                               # Multi-page Streamlit orchestrator with auth guard
 │   ├── components/styles.py                 # Modern custom CSS styling & responsive cards
 │   ├── components/ui.py                     # Shared UI components and renderers
-│   ├── components/api_client.py             # Frontend REST client with token injection
+│   ├── components/api_client.py             # Frontend REST client with token injection & error safety
 │   └── views/                               # Streamlit views (Dashboard, Assessments, Practice, etc.)
 ├── migrations/                              # Alembic schema migrations
 ├── scripts/
@@ -103,11 +108,12 @@ Targeted Reassessment & Progress Tracking
 │   ├── clean_database.py                    # Database schema cleanup and migration utility
 │   ├── run_backend.bat                      # Start FastAPI backend
 │   └── run_frontend.bat                     # Start Streamlit frontend
-├── tests/                                   # 92 comprehensive unit and integration tests
+├── tests/                                   # 96 comprehensive unit and integration tests
 ├── docs/                                    # System architecture and Azure setup documentation
 │   ├── architecture.md                      # Detailed technical architecture guide
 │   └── azure_setup.md                       # Azure AI Foundry & Azure AI Search configuration
 ├── .env.example                             # Environment configuration template
+├── render.yaml                              # Render blueprint for 1-click cloud deployment
 ├── LICENSE                                  # MIT License
 └── requirements.txt                         # Pinned dependencies
 ```
@@ -166,13 +172,14 @@ Frontend web application: `http://localhost:8501`
 
 ## 🧪 Automated Test Suite
 
-Run all 92 automated tests across authorization, canonical skills, question validation, deterministic scoring, profile aggregation, and API routes:
+Run all 96 automated tests across authorization, canonical skills, question validation, domain guardrails, deterministic scoring, profile aggregation, and API routes:
 
 ```bash
 python -m pytest -v
 ```
 
 ### Test Coverage Highlights
+- `tests/test_domain_guardrails.py`: Verifies domain validation and prompt safety guardrails on educational RAG inputs.
 - `tests/test_authorization.py`: Verifies User A cannot view, submit, or access User B's assessments, attempts, resumes, jobs, or learning plans.
 - `tests/test_canonical_skills.py`: Verifies alias normalization, JD vs candidate comparison, and multi-source confidence calibration.
 - `tests/test_question_validation_and_grounding.py`: Verifies strict 4-option validation, single correct answer, answer leakage rejection, hash deduplication, and zero-fallback guarantees on failure.

@@ -1,5 +1,5 @@
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Union
+from pydantic import BaseModel, Field, field_validator
 
 
 # 1. Resume Analysis Response
@@ -25,6 +25,20 @@ class ResumeAnalysisResponse(BaseModel):
     projects: List[ExtractedProject] = []
     certifications: List[str] = []
     summary: str = ""
+
+    @field_validator("education", "experience", "certifications", mode="before")
+    @classmethod
+    def normalize_string_list(cls, v):
+        if not isinstance(v, list):
+            return []
+        normalized = []
+        for item in v:
+            if isinstance(item, dict):
+                parts = [str(val).strip() for val in item.values() if val and str(val).strip()]
+                normalized.append(" - ".join(parts))
+            elif item is not None:
+                normalized.append(str(item).strip())
+        return normalized
 
 
 # 2. Job Description Analysis Response

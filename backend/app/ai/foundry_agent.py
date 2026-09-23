@@ -351,11 +351,18 @@ class AzureFoundryAgentClient:
             )
 
         if operation_type == "RAG_ANSWER":
+            target_role = payload.get("target_role") or "Placement Preparation Candidate"
             return (
                 f"{RAG_ANSWER_SYSTEM_PROMPT}\n\n"
+                f"Candidate Active Target Role: {target_role}\n"
+                f"Topic: {payload.get('topic', 'General')}\n"
                 f"Question: {payload.get('question', '')}\n\n"
                 f"Retrieved Knowledge Context:\n{json.dumps(payload.get('context_docs', []))}\n\n"
-                f"Provide a grounded educational response adhering to the schema. Output ONLY valid JSON."
+                f"MANDATORY EXECUTION INSTRUCTIONS:\n"
+                f"1. First verify if the question is strictly within professional career placement preparation for '{target_role}'.\n"
+                f"2. If the inquiry is elementary science (e.g. 'what is water', 'why is sky blue'), everyday object definitions, general trivia, casual chitchat, or unrelated to '{target_role}', you MUST REJECT under TIER 3 with confidence: 'None', grounded: false, citations: [], and the polite refusal in 'answer'.\n"
+                f"3. Only if it is genuinely relevant to '{target_role}' competencies, frameworks, or interview preparation, provide an interview-ready response under Tier 1 (if retrieved sources match) or Tier 2 (role synthesis).\n"
+                f"4. Output ONLY valid JSON adhering to the schema."
             )
 
         # General JSON operation

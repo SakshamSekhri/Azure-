@@ -24,18 +24,18 @@ class AuthService:
             is_active=True
         )
         db.add(db_user)
-        db.commit()
-        db.refresh(db_user)
+        db.flush()
 
         # Create default initial profile
         default_profile = StudentProfile(
             user_id=db_user.id,
             name=user_in.email.split("@")[0].capitalize(),
-            target_role=None,
+            target_role="",
             experience_level="Entry Level"
         )
         db.add(default_profile)
         db.commit()
+        db.refresh(db_user)
 
         return db_user
 

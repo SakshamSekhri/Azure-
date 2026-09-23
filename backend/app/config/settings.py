@@ -66,6 +66,7 @@ class Settings(BaseSettings):
     FOUNDRY_PROJECT_ENDPOINT: str = Field(default="", description="Azure AI Foundry Project Endpoint or Connection String")
     FOUNDRY_AGENT_NAME: str = Field(default="PlacementPreparationAgent", description="Foundry Agent Name")
     FOUNDRY_AGENT_VERSION: str = Field(default="4", description="Foundry Agent Version")
+    FOUNDRY_MODEL_DEPLOYMENT: str = Field(default="gpt-5-mini", description="Foundry Model Deployment Name")
 
     # Azure AI Search (RAG)
     AZURE_AI_SEARCH_ENDPOINT: str = Field(default="", description="Azure AI Search Endpoint")

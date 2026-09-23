@@ -1,21 +1,11 @@
-import os
 import requests
 from typing import Optional, Dict, Any, List
 import streamlit as st
 
 
 class APIClient:
-    def __init__(self, base_url: Optional[str] = None):
-        if not base_url:
-            backend_env = os.environ.get("BACKEND_URL")
-            if not backend_env and hasattr(st, "secrets") and "BACKEND_URL" in st.secrets:
-                backend_env = st.secrets["BACKEND_URL"]
-            base_url = backend_env or "http://127.0.0.1:8000/api/v1"
-        
-        base_url = base_url.rstrip("/")
-        if not base_url.endswith("/api/v1"):
-            base_url = f"{base_url}/api/v1"
-        self.base_url = base_url
+    def __init__(self, base_url: str = "http://127.0.0.1:8000/api/v1"):
+        self.base_url = base_url.rstrip("/")
 
     def _get_headers(self) -> Dict[str, str]:
         token = st.session_state.get("auth_token")
@@ -24,18 +14,36 @@ class APIClient:
             headers["Authorization"] = f"Bearer {token}"
         return headers
 
+    def _extract_error(self, res: requests.Response, default: str = "Request failed.") -> str:
+        try:
+            data = res.json()
+            if isinstance(data, dict):
+                return data.get("detail", default)
+            return str(data)
+        except Exception:
+            return res.text.strip() if res.text and res.text.strip() else f"{default} (HTTP {res.status_code})"
+
+    def _request(self, method: str, path: str, **kwargs) -> requests.Response:
+        url = f"{self.base_url}/{path.lstrip('/')}"
+        try:
+            return requests.request(method, url, timeout=kwargs.pop("timeout", 60), **kwargs)
+        except requests.exceptions.ConnectionError:
+            raise Exception(f"Cannot connect to backend server at {self.base_url}. Please ensure the FastAPI backend is running.")
+        except requests.exceptions.Timeout:
+            raise Exception("The backend server timed out. Please try again.")
+        except requests.exceptions.RequestException as e:
+            raise Exception(f"Network error communicating with backend: {str(e)}")
+
     def register(self, email: str, password: str) -> Dict[str, Any]:
-        url = f"{self.base_url}/auth/register"
-        res = requests.post(url, json={"email": email, "password": password})
+        res = self._request("POST", "auth/register", json={"email": email, "password": password})
         if res.status_code != 201:
-            raise Exception(res.json().get("detail", "Registration failed."))
+            raise Exception(self._extract_error(res, "Registration failed."))
         return res.json()
 
     def login(self, email: str, password: str) -> Dict[str, Any]:
-        url = f"{self.base_url}/auth/login-json"
-        res = requests.post(url, json={"email": email, "password": password})
+        res = self._request("POST", "auth/login-json", json={"email": email, "password": password})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Login failed."))
+            raise Exception(self._extract_error(res, "Login failed."))
         data = res.json()
         st.session_state["auth_token"] = data.get("access_token")
         st.session_state["user_info"] = data.get("user")
@@ -58,14 +66,14 @@ class APIClient:
         files = {"file": (filename, file_bytes)}
         res = requests.post(url, headers=self._get_headers(), files=files)
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Resume upload failed."))
+            raise Exception(self._extract_error(res, "Resume upload failed."))
         return res.json()
 
     def analyze_resume(self, resume_id: int, force_refresh: bool = False) -> Dict[str, Any]:
         url = f"{self.base_url}/resume/analyze"
         res = requests.post(url, headers=self._get_headers(), json={"resume_id": resume_id, "force_refresh": force_refresh})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Resume analysis failed."))
+            raise Exception(self._extract_error(res, "Resume analysis failed."))
         return res.json()
 
     def get_latest_resume(self) -> Optional[Dict[str, Any]]:
@@ -80,14 +88,14 @@ class APIClient:
         url = f"{self.base_url}/jobs"
         res = requests.post(url, headers=self._get_headers(), json={"title": title, "raw_text": raw_text, "company": company})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Job creation failed."))
+            raise Exception(self._extract_error(res, "Job creation failed."))
         return res.json()
 
     def analyze_job(self, job_id: int, force_refresh: bool = False) -> Dict[str, Any]:
         url = f"{self.base_url}/jobs/analyze"
         res = requests.post(url, headers=self._get_headers(), json={"job_id": job_id, "force_refresh": force_refresh})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Job analysis failed."))
+            raise Exception(self._extract_error(res, "Job analysis failed."))
         return res.json()
 
     def get_latest_job(self) -> Optional[Dict[str, Any]]:
@@ -132,7 +140,7 @@ class APIClient:
         url = f"{self.base_url}/github/connect"
         res = requests.post(url, headers=self._get_headers(), json={"username": username})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "GitHub analysis failed."))
+            raise Exception(self._extract_error(res, "GitHub analysis failed."))
         return res.json()
 
     def list_assessments(self) -> List[Dict[str, Any]]:
@@ -162,7 +170,7 @@ class APIClient:
             payload["idempotency_key"] = idempotency_key
         res = requests.post(url, headers=self._get_headers(), json=payload)
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Assessment submission failed."))
+            raise Exception(self._extract_error(res, "Assessment submission failed."))
         return res.json()
 
     def get_assessment_result(self, assessment_id: int) -> Optional[Dict[str, Any]]:
@@ -210,7 +218,7 @@ class APIClient:
         url = f"{self.base_url}/learning/plan/generate"
         res = requests.post(url, headers=self._get_headers(), json={"target_role": target_role, "force_refresh": force_refresh})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Plan generation failed."))
+            raise Exception(self._extract_error(res, "Plan generation failed."))
         return res.json()
 
     def toggle_activity(self, activity_id: int, completed: bool) -> Dict[str, Any]:
@@ -223,7 +231,7 @@ class APIClient:
         url = f"{self.base_url}/learning/ask"
         res = requests.post(url, headers=self._get_headers(), json={"question": question, "topic": topic})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Failed to retrieve educational answer."))
+            raise Exception(self._extract_error(res, "Failed to retrieve educational answer."))
         return res.json()
 
     def generate_personalized_assessment(
@@ -244,7 +252,7 @@ class APIClient:
         }
         res = requests.post(url, headers=self._get_headers(), json=payload)
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Failed to generate personalized assessment."))
+            raise Exception(self._extract_error(res, "Failed to generate personalized assessment."))
         return res.json()
 
 
@@ -270,14 +278,14 @@ class APIClient:
         url = f"{self.base_url}/practice/skills/focus"
         res = requests.get(url, headers=self._get_headers(), params={"skill": skill_identifier})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Failed to retrieve skill focus detail."))
+            raise Exception(self._extract_error(res, "Failed to retrieve skill focus detail."))
         return res.json()
 
     def get_skill_topics(self, skill_identifier: str) -> List[Dict[str, Any]]:
         url = f"{self.base_url}/practice/skills/topics"
         res = requests.get(url, headers=self._get_headers(), params={"skill": skill_identifier})
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Failed to retrieve skill topics."))
+            raise Exception(self._extract_error(res, "Failed to retrieve skill topics."))
         return res.json()
 
     def generate_practice(
@@ -296,7 +304,7 @@ class APIClient:
         }
         res = requests.post(url, headers=self._get_headers(), json=payload)
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Failed to generate practice questions."))
+            raise Exception(self._extract_error(res, "Failed to generate practice questions."))
         return res.json()
 
     def generate_focused_assessment(
@@ -315,7 +323,7 @@ class APIClient:
         }
         res = requests.post(url, headers=self._get_headers(), json=payload)
         if res.status_code != 200:
-            raise Exception(res.json().get("detail", "Failed to generate focused assessment."))
+            raise Exception(self._extract_error(res, "Failed to generate focused assessment."))
         return res.json()
 
 

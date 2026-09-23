@@ -188,13 +188,21 @@ class SkillTopicService:
 
         # 3. If no topics yet tracked, populate with standard canonical starter topics
         if not topic_stats:
-            starter = STARTER_TOPICS_MAP.get(canonical_skill_id) or [
-                f"{display_name} Fundamentals & Architecture",
-                f"{display_name} Best Practices & Design Patterns",
-                f"{display_name} Performance Optimization",
-                f"{display_name} Debugging & Error Handling",
-                f"{display_name} Security & Production Readiness"
-            ]
+            is_edu = any(w in display_name.lower() for w in ["degree", "bachelor", "master", "mba", "phd", "diploma"])
+            if is_edu:
+                starter = [
+                    f"{display_name} Curriculum & Specializations",
+                    f"{display_name} Projects & Case Studies",
+                    f"{display_name} Placement & Interview Preparation"
+                ]
+            else:
+                starter = STARTER_TOPICS_MAP.get(canonical_skill_id) or [
+                    f"{display_name} Fundamentals & Architecture",
+                    f"{display_name} Best Practices & Design Patterns",
+                    f"{display_name} Performance Optimization",
+                    f"{display_name} Debugging & Error Handling",
+                    f"{display_name} Security & Production Readiness"
+                ]
             for t in starter:
                 topic_stats[t] = {
                     "attempted": 0,

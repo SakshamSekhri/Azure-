@@ -38,6 +38,14 @@ async def lifespan(app: FastAPI):
                 cols_ans = {c["name"] for c in inspector.get_columns("assessment_answers")}
                 if "attempt_id" not in cols_ans:
                     conn.execute(text("ALTER TABLE assessment_answers ADD COLUMN attempt_id INTEGER"))
+            if "student_profiles" in table_names and "users" in table_names:
+                conn.execute(text("""
+                    INSERT INTO student_profiles (user_id, name, target_role, experience_level, created_at, updated_at)
+                    SELECT u.id, SUBSTR(u.email, 1, INSTR(u.email, '@') - 1), '', 'Entry Level', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                    FROM users u
+                    LEFT JOIN student_profiles p ON u.id = p.user_id
+                    WHERE p.id IS NULL
+                """))
             conn.commit()
     except Exception as e:
         logger.warning(f"SQLite migration check warning: {e}")
