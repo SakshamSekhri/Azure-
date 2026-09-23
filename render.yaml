@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: placement-prep-backend
+    runtime: python
+    region: ohio
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn backend.app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: FOUNDRY_PROJECT_ENDPOINT
+        sync: false
+      - key: FOUNDRY_AGENT_NAME
+        value: PlacementPreparationAgent
+      - key: FOUNDRY_AGENT_VERSION
+        value: "4"
+      - key: AI_CACHE_ENABLED
+        value: "true"
+      - key: AZURE_CLIENT_ID
+        sync: false
+      - key: AZURE_CLIENT_SECRET
+        sync: false
+      - key: AZURE_TENANT_ID
+        sync: false
